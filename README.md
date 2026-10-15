@@ -25,3 +25,11 @@ GitHub → Actions → Deploy → Run workflow → action = rollback (пусто
 
 ## Обновление самого kit на сервере
 Скрипты лежат в `/opt/deploy-kit/bin` (владелец root, раннеры не могут их менять). После изменения в репо: скопировать `bin/` в `/opt/deploy-kit/bin` от root.
+
+## nginx: закрыть служебные файлы
+
+`templates/deny-service-files.conf` скопировать в `/etc/nginx/snippets/` и подключить в `server{}` проекта до остальных regex-location (до `location ~ \.php$`):
+
+    include snippets/deny-service-files.conf;
+
+Отдаёт 404 на базы (.sqlite/.db), логи, .env/.md/.conf и т.п., скрытые файлы (кроме /.well-known), /REVISION, deploy.conf и папки docs, storage, config, data, database, tests, scripts и др. Перед подключением проверить, что сайт не отдаёт браузеру файлы из этих папок.
