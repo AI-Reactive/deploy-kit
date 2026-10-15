@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# deploy-kit: выкладка релиза. Запускается раннером проекта (не root).
+# Использование: dk-deploy <папка_с_git_checkout> [путь_к_deploy.conf]
+set -Eeuo pipefail
+SRC=${1:?папка с исходниками}; CONF=${2:-$SRC/deploy.conf}
+DRY_RUN=${DRY_RUN:-0}
+log(){ printf '[%(%H:%M:%S)T] %s\n' -1 "$*"; }
+die(){ log "ОШИБКА: $*"; exit 1; }
+[ -f "$CONF" ] || die "нет конфига $CONF"
+# значения по умолчанию
+KEEP_RELEASES=5; HEALTH_PATH=/; HEALTH_SCHEME=https; PHP_LINT=all
+SHARED_DIRS=""; SHARED_FILES=""; HOOK_BUILD=""; HOOK_AFTER_SWITCH=""; EXCLUDE=""
+# shellcheck disable=SC1090
+. "$CONF"
+: "${DOMAIN:?DOMAIN не задан}"; : "${APP_DIR:?APP_DIR не задан}"
+SHA=$(git -C "$SRC" rev-parse HEAD); SHORT=${SHA:0:7}
+REL="$APP_DIR/releases/$(date +%Y%m%d-%H%M%S)-$SHORT"
+T0=$(date +%s.%N)
+mkdir -p "$APP_DIR/releases" "$APP_DIR/shared"
+log "Релиз $REL"
+mkdir "$REL"
+cleanup_fail(){ log "Выкладка остановлена, текущий сайт не тронут"; rm -rf "$REL"; }
+trap cleanup_fail EXIT
+git -C "$SRC" archive --format=tar HEAD | tar -x -C "$REL"
+for p in $EXCLUDE; do rm -rf "${REL:?}/$p"; done
+if [ -n "$HOOK_BUILD" ]; then log "build: $HOOK_BUILD"; (cd "$REL" && bash -c "$HOOK_BUILD"); fi
+if [ "$PHP_LINT" != off ]; then
+  log "php -l ($PHP_LINT)"
+  LINT_OUT=$(find "$REL" -name '*.php' -not -path '*/vendor/*' -print0 \
+      | xargs -0 -r -n 20 -P "$(nproc)" php -d display_errors=1 -l 2>&1 | grep -v '^No syntax errors' || true)
+  if [ -n "$LINT_OUT" ]; then printf '%s\n' "$LINT_OUT" | sed "s#$REL/##g"; die "синтаксическая ошибка PHP"; fi
+fi
+for p in $SHARED_DIRS; do
+  [ -e "$APP_DIR/shared/$p" ] || mkdir -p "$APP_DIR/shared/$p"
+  rm -rf "${REL:?}/$p"; mkdir -p "$(dirname "$REL/$p")"; ln -s "$APP_DIR/shared/$p" "$REL/$p"
+done
+for p in $SHARED_FILES; do
+  [ -e "$APP_DIR/shared/$p" ] || log "предупреждение: нет shared/$p"
+  rm -f "${REL:?}/$p"; mkdir -p "$(dirname "$REL/$p")"; ln -s "$APP_DIR/shared/$p" "$REL/$p"
+done
+echo "$SHA" > "$REL/REVISION"
+trap - EXIT
+if [ "$DRY_RUN" = 1 ]; then rm -rf "$REL"; log "DRY_RUN: релиз собран и проверен, переключение пропущено, папка удалена"; exit 0; fi
+PREV=$(readlink "$APP_DIR/current" 2>/dev/null || true)
+switch(){ ln -sfn "$1" "$APP_DIR/.current.tmp" && mv -T "$APP_DIR/.current.tmp" "$APP_DIR/current"; }
+switch "$REL"; log "current -> $REL"
+health(){
+  local code i
+  for i in 1 2 3; do
+    code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 \
+      --resolve "$DOMAIN:443:127.0.0.1" --resolve "$DOMAIN:80:127.0.0.1" \
+      "${HEALTH_URL:-$HEALTH_SCHEME://$DOMAIN$HEALTH_PATH}" || true)
+    [ "$code" = 200 ] && return 0; sleep 1
+  done
+  log "проверка $HEALTH_PATH: HTTP $code"; return 1
+}
+if ! health; then
+  if [ -n "$PREV" ]; then switch "$PREV"; log "АВТООТКАТ на $PREV"; rm -rf "$REL"; fi
+  exit 1
+fi
+if [ -n "$HOOK_AFTER_SWITCH" ]; then log "after_switch: $HOOK_AFTER_SWITCH"; (cd "$REL" && bash -c "$HOOK_AFTER_SWITCH") || log "предупреждение: хук after_switch завершился с ошибкой"; fi
+# храним KEEP_RELEASES последних, текущий не трогаем
+ls -1d "$APP_DIR"/releases/*/ 2>/dev/null | sed 's#/$##' | sort | head -n -"$KEEP_RELEASES" | while read -r old; do
+  [ "$old" = "$REL" ] || rm -rf "$old"; done
+log "Готово за $(printf '%.1f' "$(echo "$(date +%s.%N) - $T0" | bc)") с: $SHORT"

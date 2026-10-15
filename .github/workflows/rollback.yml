@@ -1,0 +1,15 @@
+# Общий откат (reusable workflow).
+name: deploy-kit rollback
+on:
+  workflow_call:
+    inputs:
+      runner:  { type: string, required: true }
+      config:  { type: string, default: deploy.conf }
+      release: { type: string, default: "", description: "имя релиза; пусто = предыдущий" }
+jobs:
+  rollback:
+    runs-on: [self-hosted, "${{ inputs.runner }}"]
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1, sparse-checkout: "${{ inputs.config }}", sparse-checkout-cone-mode: false }
+      - run: /opt/deploy-kit/bin/dk-rollback "$GITHUB_WORKSPACE/${{ inputs.config }}" "${{ inputs.release }}"

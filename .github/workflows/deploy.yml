@@ -1,0 +1,18 @@
+# Общая выкладка (reusable workflow). Вызывается из репозитория проекта.
+name: deploy-kit deploy
+on:
+  workflow_call:
+    inputs:
+      runner:   { type: string, required: true,  description: "лейбл раннера проекта, напр. ai-reactive" }
+      config:   { type: string, default: deploy.conf }
+      dry_run:  { type: boolean, default: false }
+jobs:
+  deploy:
+    runs-on: [self-hosted, "${{ inputs.runner }}"]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1, clean: true }
+      - name: Выкладка
+        env: { DRY_RUN: "${{ inputs.dry_run && '1' || '0' }}" }
+        run: /opt/deploy-kit/bin/dk-deploy "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/${{ inputs.config }}"

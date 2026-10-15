@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# deploy-kit: подготовка сервера под новый проект (запускать от root один раз).
+# Использование: dk-bootstrap <домен> <owner/repo> [RUNNER_TOKEN]
+#  - создаёт пользователя gh-<имя> (без пароля, без shell-входа по SSH, без sudo)
+#  - создаёт /var/www/<домен>/{releases,shared}, права: пользователь + группа www-data
+#  - если передан RUNNER_TOKEN: ставит self-hosted runner (репо-уровня) как systemd-сервис
+set -Eeuo pipefail
+DOMAIN=${1:?домен}; REPO=${2:?owner/repo}; TOKEN=${3:-}
+NAME=${DOMAIN%%.*}; U="gh-$NAME"; APP=/var/www/$DOMAIN
+RUNNER_VER=${RUNNER_VER:-2.329.0}
+command -v setfacl >/dev/null || apt-get install -y acl
+id "$U" >/dev/null 2>&1 || useradd --system --create-home --home-dir "/home/$U" --shell /usr/sbin/nologin "$U"
+passwd -l "$U" >/dev/null
+# запрет входа по SSH (через DenyUsers в отдельном файле не трогаем sshd: shell=nologin и нет ключей)
+install -d -o "$U" -g www-data -m 2775 "$APP" "$APP/releases"
+install -d -o root -g www-data -m 2770 "$APP/shared"
+setfacl -m u:"$U":rwx "$APP/shared"            # может создавать каталоги-заглушки
+setfacl -d -m g:www-data:rwX "$APP/shared"
+echo "Каталоги: $APP/{releases,shared}, пользователь $U"
+if [ -n "$TOKEN" ]; then
+  RD="/home/$U/actions-runner"
+  if [ ! -x "$RD/config.sh" ]; then
+    sudo -u "$U" mkdir -p "$RD"
+    curl -fsSL "https://github.com/actions/runner/releases/download/v$RUNNER_VER/actions-runner-linux-x64-$RUNNER_VER.tar.gz" | sudo -u "$U" tar xz -C "$RD"
+  fi
+  sudo -u "$U" "$RD/config.sh" --unattended --url "https://github.com/$REPO" --token "$TOKEN" \
+     --name "vps-$NAME" --labels "$NAME" --work _work --replace
+  (cd "$RD" && ./svc.sh install "$U" && ./svc.sh start)
+  echo "Раннер vps-$NAME (лейбл $NAME) запущен"
+fi

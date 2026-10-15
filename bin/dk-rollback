@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# deploy-kit: откат current на предыдущий (или указанный) релиз.
+# Использование: dk-rollback <deploy.conf> [имя_релиза]
+set -Eeuo pipefail
+CONF=${1:?deploy.conf}; HEALTH_PATH=/; HEALTH_SCHEME=https
+. "$CONF"; : "${DOMAIN:?}"; : "${APP_DIR:?}"
+CUR=$(basename "$(readlink "$APP_DIR/current")")
+if [ -n "${2:-}" ]; then TARGET=$2; else
+  TARGET=$(ls -1 "$APP_DIR/releases" | sort | awk -v c="$CUR" '$0==c{print p; exit} {p=$0}'); fi
+[ -n "$TARGET" ] && [ -d "$APP_DIR/releases/$TARGET" ] || { echo "Нет релиза для отката (текущий $CUR)"; exit 1; }
+ln -sfn "$APP_DIR/releases/$TARGET" "$APP_DIR/.current.tmp" && mv -T "$APP_DIR/.current.tmp" "$APP_DIR/current"
+echo "current: $CUR -> $TARGET"
+code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 --resolve "$DOMAIN:443:127.0.0.1" --resolve "$DOMAIN:80:127.0.0.1" "${HEALTH_URL:-$HEALTH_SCHEME://$DOMAIN$HEALTH_PATH}" || true)
+echo "Проверка $HEALTH_PATH: HTTP $code"; [ "$code" = 200 ]

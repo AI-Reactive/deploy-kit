@@ -1,0 +1,18 @@
+# .github/workflows/deploy.yml в репозитории проекта
+name: Deploy
+on:
+  push: { branches: [main] }
+  workflow_dispatch:
+    inputs:
+      action: { type: choice, options: [deploy, rollback], default: deploy }
+      release: { type: string, default: "", description: "для отката: имя релиза (пусто = предыдущий)" }
+concurrency: { group: deploy-prod, cancel-in-progress: false }
+jobs:
+  deploy:
+    if: github.event_name == 'push' || inputs.action == 'deploy'
+    uses: AI-Reactive/deploy-kit/.github/workflows/deploy.yml@main
+    with: { runner: PROJECT }
+  rollback:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'rollback'
+    uses: AI-Reactive/deploy-kit/.github/workflows/rollback.yml@main
+    with: { runner: PROJECT, release: "${{ inputs.release }}" }
