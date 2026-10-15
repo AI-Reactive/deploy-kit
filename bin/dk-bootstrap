@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # deploy-kit: подготовка сервера под новый проект (запускать от root один раз).
-# Использование: dk-bootstrap <домен> <owner/repo> [RUNNER_TOKEN]
+# Использование: [DK_NAME=имя] dk-bootstrap <домен> <owner/repo> [RUNNER_TOKEN]
 #  - создаёт пользователя gh-<имя> (без пароля, без shell-входа по SSH, без sudo)
 #  - создаёт /var/www/<домен>/{releases,shared}, права: пользователь + группа www-data
 #  - если передан RUNNER_TOKEN: ставит self-hosted runner (репо-уровня) как systemd-сервис
 set -Eeuo pipefail
 DOMAIN=${1:?домен}; REPO=${2:?owner/repo}; TOKEN=${3:-}
-NAME=${DOMAIN%%.*}; U="gh-$NAME"; APP=/var/www/$DOMAIN
+NAME=${DK_NAME:-${DOMAIN%%.*}}; U="gh-$NAME"; APP=/var/www/$DOMAIN   # DK_NAME=metallist — короткое имя, если домен длинный
 RUNNER_VER=${RUNNER_VER:-2.329.0}
 command -v setfacl >/dev/null || apt-get install -y acl
 id "$U" >/dev/null 2>&1 || useradd --system --create-home --home-dir "/home/$U" --shell /usr/sbin/nologin "$U"
