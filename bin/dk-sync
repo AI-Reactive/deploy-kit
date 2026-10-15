@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# deploy-kit: постоянная копия репозитория вместо actions/checkout.
+# Использование: GH_TOKEN=... dk-sync <owner/repo> <sha> <папка>
+# Приводит папку ровно к <sha>: fetch одного коммита, reset --hard, clean -ffdx.
+# При любой ошибке копия удаляется и клонируется заново. Токен на диск не пишется:
+# он передаётся заголовком только в команду fetch.
+set -Eeuo pipefail
+umask 022
+REPO=${1:?owner/repo}; SHA=${2:?sha}; DIR=${3:?папка}
+: "${GH_TOKEN:?нужен GH_TOKEN}"
+URL="https://github.com/$REPO.git"
+log(){ printf '[%(%H:%M:%S)T] %s\n' -1 "$*"; }
+AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+g(){ git -C "$DIR" -c gc.auto=0 -c advice.detachedHead=false "$@"; }
+fetch(){ g -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" \
+           fetch -q --no-tags --depth=1 origin "$SHA"; }
+sync(){
+  [ -d "$DIR/.git" ] || return 1
+  [ "$(g remote get-url origin)" = "$URL" ] || return 1
+  fetch || return 1
+  g reset -q --hard "$SHA" || return 1
+  g clean -q -ffdx || return 1
+  [ "$(g rev-parse HEAD)" = "$SHA" ] || return 1
+  [ -z "$(g status --porcelain)" ] || return 1
+}
+fresh(){
+  rm -rf "$DIR"; mkdir -p "$DIR"
+  git init -q "$DIR"; g remote add origin "$URL"
+  fetch; g reset -q --hard "$SHA"
+}
+T0=$(date +%s.%N)
+if sync 2>/dev/null; then how=обновлена; else log "копия недоступна или повреждена — клонирую заново"; fresh; how=склонирована; fi
+# раз в 50 выкладок — сжать историю мелких fetch
+n=$(( $(cat "$DIR/.git/dk-count" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$DIR/.git/dk-count"
+if (( n % 50 == 0 )); then g reflog expire --expire=now --all; g gc -q --prune=now || true; fi
+log "Копия $DIR $how до ${SHA:0:7} за $(awk -v a="$T0" -v b="$(date +%s.%N)" 'BEGIN{printf "%.1f", b-a}') с"

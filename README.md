@@ -3,7 +3,8 @@
 Один механизм для всех сайтов на VPS. Проект отличается только файлом `deploy.conf` (5–10 строк).
 
 ## Как это работает
-- push в `main` → GitHub Actions → self-hosted runner проекта на VPS → `/opt/deploy-kit/bin/dk-deploy`.
+- push в `main` → GitHub Actions → self-hosted runner проекта на VPS → `/opt/deploy-kit/bin/dk-sync` → `/opt/deploy-kit/bin/dk-deploy`.
+- Код: вместо `actions/checkout` у раннера постоянная копия `~gh-<проект>/src/<repo>`. `dk-sync` делает `git fetch --depth=1` ровно нужного коммита, `reset --hard`, `clean -ffdx` и проверяет, что копия чистая и на нужном SHA. При любой ошибке копия удаляется и клонируется заново. Авторизация — `GITHUB_TOKEN` джобы заголовком `http.extraheader` только для команды fetch, на диск токен не пишется. Экономит ~4–5 с на выкладку.
 - Раскладка: `/var/www/<домен>/releases/<дата>-<коммит>`, `current` → симлинк на рабочий релиз, `shared/` — загрузки, секреты, базы (подключаются в релиз симлинками).
 - Шаги: `git archive` в новую папку → хук build (если есть) → `php -l` всех .php → симлинки shared → атомарное переключение `current` (`ln -sfn` + `mv -T`) → проверка главной (200, `curl --resolve` на 127.0.0.1) → иначе автооткат → хук after_switch → хранится 5 релизов.
 - opcache сбрасывать не нужно: nginx отдаёт PHP `$realpath_root`, у каждого релиза свои пути.

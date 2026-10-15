@@ -11,8 +11,11 @@ jobs:
     runs-on: [self-hosted, "${{ inputs.runner }}"]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 1, clean: true }
+      # Вместо actions/checkout: постоянная копия в домашней папке пользователя раннера,
+      # подтягивается только нужный коммит (fetch + reset --hard + clean -ffdx).
+      - name: Код (постоянная копия)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: /opt/deploy-kit/bin/dk-sync "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$HOME/src/${GITHUB_REPOSITORY#*/}"
       - name: Выкладка
         env: { DRY_RUN: "${{ inputs.dry_run && '1' || '0' }}" }
-        run: /opt/deploy-kit/bin/dk-deploy "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/${{ inputs.config }}"
+        run: /opt/deploy-kit/bin/dk-deploy "$HOME/src/${GITHUB_REPOSITORY#*/}" "$HOME/src/${GITHUB_REPOSITORY#*/}/${{ inputs.config }}"

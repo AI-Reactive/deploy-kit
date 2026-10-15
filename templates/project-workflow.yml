@@ -1,4 +1,6 @@
 # .github/workflows/deploy.yml в репозитории проекта
+# Код берётся не actions/checkout, а постоянной копией у раннера (dk-sync) — ничего настраивать не нужно.
+# permissions: contents read нужен для fetch токеном джобы.
 name: Deploy
 on:
   push: { branches: [main] }
@@ -6,6 +8,7 @@ on:
     inputs:
       action: { type: choice, options: [deploy, rollback], default: deploy }
       release: { type: string, default: "", description: "для отката: имя релиза (пусто = предыдущий)" }
+permissions: { contents: read }
 concurrency: { group: deploy-prod, cancel-in-progress: false }
 jobs:
   deploy:
