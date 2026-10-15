@@ -2,7 +2,8 @@
 # deploy-kit: выкладка релиза. Запускается раннером проекта (не root).
 # Использование: dk-deploy <папка_с_git_checkout> [путь_к_deploy.conf]
 set -Eeuo pipefail
-SRC=${1:?папка с исходниками}; CONF=${2:-$SRC/deploy.conf}
+umask 022; cd /
+SRC=$(realpath "${1:?папка с исходниками}"); CONF=$(realpath "${2:-$SRC/deploy.conf}")
 DRY_RUN=${DRY_RUN:-0}
 log(){ printf '[%(%H:%M:%S)T] %s\n' -1 "$*"; }
 die(){ log "ОШИБКА: $*"; exit 1; }

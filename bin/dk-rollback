@@ -2,7 +2,8 @@
 # deploy-kit: откат current на предыдущий (или указанный) релиз.
 # Использование: dk-rollback <deploy.conf> [имя_релиза]
 set -Eeuo pipefail
-CONF=${1:?deploy.conf}; HEALTH_PATH=/; HEALTH_SCHEME=https
+umask 022; cd /
+CONF=$(realpath "${1:?deploy.conf}"); HEALTH_PATH=/; HEALTH_SCHEME=https
 . "$CONF"; : "${DOMAIN:?}"; : "${APP_DIR:?}"
 CUR=$(basename "$(readlink "$APP_DIR/current")")
 if [ -n "${2:-}" ]; then TARGET=$2; else
