@@ -12,7 +12,7 @@ command -v setfacl >/dev/null || apt-get install -y acl
 id "$U" >/dev/null 2>&1 || useradd --system --create-home --home-dir "/home/$U" --shell /usr/sbin/nologin "$U"
 passwd -l "$U" >/dev/null
 # запрет входа по SSH (через DenyUsers в отдельном файле не трогаем sshd: shell=nologin и нет ключей)
-install -d -o "$U" -g www-data -m 2775 "$APP" "$APP/releases"
+install -d -o "$U" -g www-data -m 2755 "$APP" "$APP/releases"
 install -d -o root -g www-data -m 2770 "$APP/shared"
 setfacl -m u:"$U":rwx "$APP/shared"            # может создавать каталоги-заглушки
 setfacl -d -m g:www-data:rwX "$APP/shared"

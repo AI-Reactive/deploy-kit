@@ -19,7 +19,7 @@ GitHub → Actions → Deploy → Run workflow → action = rollback (пусто
 1. В репозитории проекта: скопировать `templates/deploy.conf` и `templates/project-workflow.yml` (→ `.github/workflows/deploy.yml`, заменить PROJECT на лейбл).
 2. Settings → Actions → Runners → New self-hosted runner → скопировать токен.
 3. На сервере от root: `/opt/deploy-kit/bin/dk-bootstrap <домен> AI-Reactive/<repo> <токен>`.
-4. Положить секреты/данные в `/var/www/<домен>/shared/`, nginx: `root /var/www/<домен>/current;`, `fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;`, `nginx -t && systemctl reload nginx`.
+4. Положить секреты/данные в `/var/www/<домен>/shared/`, nginx: `root /var/www/<домен>/current;`, `fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;` и ПОСЛЕ `include fastcgi_params;` — `fastcgi_param DOCUMENT_ROOT $realpath_root;` (иначе realpath-кеш PHP смешивает старый и новый релиз → «Cannot redeclare»), `nginx -t && systemctl reload nginx`.
 5. push в main.
 
 ## Обновление самого kit на сервере
